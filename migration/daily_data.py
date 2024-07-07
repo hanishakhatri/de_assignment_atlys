@@ -1,8 +1,7 @@
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import psycopg2
-from psycopg2 import sql
+import sqlite3
 
 # API details for Alpha Vantage
 API_ENDPOINT = "https://www.alphavantage.co/query"
@@ -13,12 +12,9 @@ COMPANIES = ["RELIANCE.BSE", "TCS.BSE", "HDFCBANK.BSE", "ICICIBANK.BSE", "BHARTI
 
 # Database connection parameters
 DB_PARAMS = {
-    "dbname": "stock_market_data",
-    "user": "postgres",
-    "password": "Hanisha@123",
-    "host": "localhost",
-    "port": "5432"
+    "dbname": "stock_data.db"
 }
+
 
 def request(symbol):
     """ Request to the alpha vinatge API """
@@ -42,7 +38,6 @@ def daily_data(symbol, yesterday_date):
     """
     try:
         data = request(symbol)
-
         if data is None:
             raise ValueError("Error fetching data. API request failed or returned invalid data.")
 
@@ -63,12 +58,12 @@ def daily_data(symbol, yesterday_date):
             })
 
         df = pd.DataFrame(formatted_data)
-
+        print("df",df.head())
         # Filter the DataFrame for yesterday's date
         filtered_df = df[df['Date'] == yesterday_date]
 
         if filtered_df.empty:
-            raise ValueError(f"No data available for {symbol} on {yesterday_date}")
+            print(f"No data available for {symbol} on {yesterday_date}")
 
         return filtered_df
     
@@ -81,9 +76,9 @@ def connect_to_db():
     Establishes a connection to the database and returns the connection object.
     """
     try:
-        conn = psycopg2.connect(**DB_PARAMS)
+        conn = sqlite3.connect(DB_PARAMS["dbname"])
         return conn
-    except psycopg2.DatabaseError as e:
+    except Exception as e:
         print(f"Database connection error: {e}")
         raise e
 
@@ -92,22 +87,21 @@ def create_table(conn):
     Creates the stock_data table if it does not exist.
     """
     try:
-        with conn.cursor() as cur:
-            create_table_query = """
-            CREATE TABLE IF NOT EXISTS stock_data (
-                Date DATE,
-                Company VARCHAR(20),
-                Open NUMERIC,
-                High NUMERIC,
-                Low NUMERIC,
-                Close NUMERIC,
-                Volume BIGINT,
-                PRIMARY KEY (Date, Company)
-            );
-            """
-            cur.execute(create_table_query)
-            conn.commit()
-    except psycopg2.DatabaseError as e:
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS stock_data (
+            Date DATE,
+            Company VARCHAR(20),
+            Open NUMERIC,
+            High NUMERIC,
+            Low NUMERIC,
+            Close NUMERIC,
+            Volume BIGINT,
+            PRIMARY KEY (Date, Company)
+        );
+        """
+        conn.execute(create_table_query)
+        conn.commit()
+    except sqlite3.DatabaseError as e:
         print(f"Error creating table: {e}")
         raise e
 
@@ -116,17 +110,18 @@ def insert_data(conn, data):
     Inserts data into the stock_data table. Updates existing records if there's a conflict.
     """
     try:
-        with conn.cursor() as cur:
-            insert_query = sql.SQL("""
-            INSERT INTO stock_data (Date, Company, Open, High, Low, Close, Volume)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (Date, Company) DO UPDATE SET
-                Open = EXCLUDED.Open,
-                High = EXCLUDED.High,
-                Low = EXCLUDED.Low,
-                Close = EXCLUDED.Close,
-                Volume = EXCLUDED.Volume;
-            """)
+        insert_query = """
+        INSERT INTO stock_data (Date, Company, Open, High, Low, Close, Volume)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(Date, Company) DO UPDATE SET
+            Open = excluded.Open,
+            High = excluded.High,
+            Low = excluded.Low,
+            Close = excluded.Close,
+            Volume = excluded.Volume;
+        """
+
+        with conn:
             for row in data:
                 values = (
                     row["Date"],
@@ -137,9 +132,10 @@ def insert_data(conn, data):
                     row["Close"],
                     row["Volume"]
                 )
-                cur.execute(insert_query, values)
+                conn.execute(insert_query, values)
             conn.commit()
-    except psycopg2.DatabaseError as e:
+    except sqlite3.DatabaseError as e:
+        print(f"Database error: {e}")
         raise e
 
 def insert_data_to_db(data):
@@ -151,7 +147,7 @@ def insert_data_to_db(data):
         conn = connect_to_db()
         create_table(conn)
         insert_data(conn, data)
-    except psycopg2.DatabaseError as e:
+    except sqlite3.DatabaseError as e:
         print(f"Database error occurred: {e}")
         raise e
     finally:
@@ -180,9 +176,8 @@ def main():
         yesterday_date = (datetime.now() - timedelta(days=1)).date()
         yesterday_date = yesterday_date.strftime('%Y-%m-%d')
         for company in COMPANIES:
-            print(f"Fetching data for {company}")
             df = daily_data(company,yesterday_date)
-            if df:
+            if df is not None:
                 data = convert_data_type(df)
                 insert_data_to_db(data)
                 print(f"data succesfully inserted for {company}")
