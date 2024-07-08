@@ -58,7 +58,6 @@ def daily_data(symbol, yesterday_date):
             })
 
         df = pd.DataFrame(formatted_data)
-        print("df",df.head())
         # Filter the DataFrame for yesterday's date
         filtered_df = df[df['Date'] == yesterday_date]
 

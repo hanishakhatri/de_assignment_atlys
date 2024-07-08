@@ -8,7 +8,7 @@ def sqlite_query(datafile):
 
     # Execute the query
     cursor.execute("""
-        SELECT Company, Date, High - Low AS Variation
+        SELECT Company, Date, ROUND(High - Low, 3)
         FROM stock_data
         ORDER BY Company, Date;
         """)
@@ -28,7 +28,7 @@ def write_results_to_csv(results,output_csv_file):
 def main():
     # Example usage:
     try :
-        csv_file = "daily_validation_of_price.csv"
+        csv_file = "daily_variation_of_price.csv"
         db_file = 'stock_data.db'  # Path to the output SQLite database file
         rows = sqlite_query(db_file)
         write_results_to_csv(rows,output_csv_file = csv_file)
