@@ -1,5 +1,4 @@
-# de_assignment_atlys
-DE Assignment by Atlys
+
 
 ## TOP 10 MARKET CAP STOCK IN INDIA 
 source link : https://www.forbesindia.com/article/explainers/top-10-companies-india-market-valuation/86307/1
